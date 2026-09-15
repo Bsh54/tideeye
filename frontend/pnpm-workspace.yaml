@@ -1,0 +1,3 @@
+# pnpm 10 reads build-script allow-list here (moved out of package.json).
+onlyBuiltDependencies:
+  - sharp
