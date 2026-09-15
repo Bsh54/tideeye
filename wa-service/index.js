@@ -19,6 +19,9 @@ const WA_PHONE = (process.env.WA_PHONE || "").replace(/[^0-9]/g, "");
 const WA_TOKEN = process.env.WA_TOKEN || "";
 const AUTH_DIR = process.env.WA_AUTH_DIR || "/data/auth";
 const API = (process.env.ANALYSIS_API || "").replace(/\/$/, "");
+const LLM_BASE = (process.env.TIDEEYE_LLM_BASE_URL || "").replace(/\/$/, "");
+const LLM_KEY = process.env.TIDEEYE_LLM_API_KEY || "";
+const LLM_MODEL = process.env.TIDEEYE_LLM_MODEL || "";
 const SUBS_FILE = process.env.WA_SUBS_FILE || "/data/subs.json";
 const CHECK_MS = 24 * 60 * 60 * 1000; // daily
 
@@ -83,6 +86,30 @@ async function start() {
       }
     }, 3000);
   }
+
+  // Conversational bot: reply (via AI) to incoming direct messages.
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify") return;
+    for (const m of messages) {
+      try {
+        if (m.key.fromMe) continue;
+        const jid = m.key.remoteJid || "";
+        if (jid === "status@broadcast" || jid.endsWith("@g.us")) continue;
+        const text =
+          m.message?.conversation || m.message?.extendedTextMessage?.text || "";
+        if (!text.trim()) continue;
+        try {
+          await sock.sendPresenceUpdate("composing", jid);
+        } catch {
+          /* ignore */
+        }
+        const reply = await aiChat(text, jid);
+        await sock.sendMessage(jid, { text: reply });
+      } catch (e) {
+        console.error("incoming message handler", e);
+      }
+    }
+  });
 }
 start().catch((e) => {
   lastError = String(e);
@@ -182,6 +209,43 @@ function aiMessage(result, place) {
   const rec = (result.risk?.recommendation || "").trim();
   const emoji = { low: "✅", medium: "⚠️", high: "🚫" }[result.risk?.level] || "💧";
   return `TideEye 💧 — ${place}\n\n${emoji} ${reasoning}\n\n${rec}`.trim();
+}
+
+// Conversational reply for an incoming WhatsApp message (the bot).
+async function aiChat(userText, jid) {
+  const num = String(jid).replace(/[^0-9]/g, "");
+  const sub = subs.find((s) => s.phones.some((p) => p.replace(/[^0-9]/g, "") === num));
+  const ctx = sub ? ` This person is subscribed to water alerts for ${sub.place}.` : "";
+  const system =
+    "You are TideEye's friendly water-safety assistant on WhatsApp, helping communities. " +
+    "Answer questions about drinking-water safety and what to do about what people observe " +
+    "(green or murky water, bad smell, dead fish, skin irritation, etc.). Be warm, plain and " +
+    "short (2 to 4 sentences). You may use one or two emojis. If the water sounds unsafe, tell " +
+    "them to boil it before drinking, not to drink it raw, keep children and animals away, and " +
+    "contact a local health worker. You are an early-warning helper, not a laboratory." + ctx;
+  if (!LLM_BASE || !LLM_KEY || !LLM_MODEL) {
+    return "Thanks for your message! 💧 If your water looks green or murky or smells bad, boil it before drinking and keep children away.";
+  }
+  try {
+    const r = await fetch(`${LLM_BASE}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + LLM_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: String(userText).slice(0, 1000) },
+        ],
+        temperature: 0.5,
+      }),
+    });
+    if (!r.ok) throw new Error("llm " + r.status);
+    const d = await r.json();
+    return (d.choices?.[0]?.message?.content || "").trim() || "💧";
+  } catch (e) {
+    console.error("aiChat", e);
+    return "Sorry, I couldn't answer just now. 💧 If your water looks or smells bad, boil it before drinking and keep children away.";
+  }
 }
 
 // ---- HTTP ------------------------------------------------------------------
