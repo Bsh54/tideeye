@@ -4,13 +4,16 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Loader2,
   FileDown,
   Mail,
   Share2,
   MessageCircle,
   MapPin,
   Satellite,
+  Activity,
+  BellRing,
+  Droplets,
+  Check,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { RiskPill } from "@/components/risk-pill";
@@ -48,12 +51,14 @@ export default function MapPage() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setFlyTo({ lng: pos.coords.longitude, lat: pos.coords.latitude }),
-      () => {
-        /* denied or unavailable: user can click the map */
-      },
+      () => {},
       { enableHighAccuracy: true, timeout: 10000 },
     );
   };
+
+  // Satellite while selecting, terrain once a result is ready.
+  const forceBasemap =
+    state.phase === "done" ? "terrain" : state.phase === "loading" ? "satellite" : null;
 
   return (
     <main className="flex h-dvh flex-col bg-background">
@@ -68,16 +73,11 @@ export default function MapPage() {
       </header>
 
       <div className="flex flex-1 flex-col overflow-y-auto">
-        {/* Map on top. It shrinks to make room for the report when analysis runs. */}
-        <div
-          className={`relative ${
-            state.phase === "idle" ? "flex-1" : "h-[52vh] shrink-0"
-          }`}
-        >
-          <WaterMap onSelect={runAnalysis} flyTo={flyTo} />
+        <div className={`relative ${state.phase === "idle" ? "flex-1" : "h-[48vh] shrink-0"}`}>
+          <WaterMap onSelect={runAnalysis} flyTo={flyTo} forceBasemap={forceBasemap} />
           {state.phase === "idle" ? (
-            <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-lg bg-card/90 px-4 py-2 text-sm font-medium shadow-card backdrop-blur">
-              Click a water point to analyze it.
+            <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-card/90 px-4 py-2 text-sm font-medium shadow-card backdrop-blur">
+              Tap a lake or river to check the water
             </div>
           ) : null}
           {askLocation ? (
@@ -85,8 +85,11 @@ export default function MapPage() {
           ) : null}
         </div>
 
-        {/* Report below the map, in normal flow (classic stacked layout). */}
-        {state.phase !== "idle" ? <ReportSection state={state} /> : null}
+        {state.phase === "loading" ? <LoadingReport /> : null}
+        {state.phase === "error" ? <ErrorReport message={state.message} /> : null}
+        {state.phase === "done" ? (
+          <Report result={state.result} lat={state.lat} lng={state.lng} />
+        ) : null}
       </div>
     </main>
   );
@@ -99,10 +102,10 @@ function LocationPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }
         <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted text-primary">
           <MapPin size={24} />
         </span>
-        <h2 className="mt-4 text-xl font-bold">Analyze the water near you?</h2>
+        <h2 className="mt-4 text-xl font-bold">Check the water near you?</h2>
         <p className="mt-2 text-base text-muted-foreground">
-          TideEye can use your location to automatically frame and analyze the
-          nearest water. Or choose a point yourself on the map.
+          TideEye can use your location to automatically find and check the nearest
+          water. Or pick a spot yourself on the map.
         </p>
         <div className="mt-6 flex gap-3">
           <button
@@ -125,174 +128,234 @@ function LocationPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }
   );
 }
 
-function ReportSection({ state }: { state: Exclude<State, { phase: "idle" }> }) {
-  const coords = `${state.lat.toFixed(4)}, ${state.lng.toFixed(4)}`;
+const LOADING_STEPS = [
+  { Icon: Satellite, label: "Finding the freshest satellite image" },
+  { Icon: Activity, label: "Reading the water" },
+  { Icon: BellRing, label: "Writing your report" },
+];
+
+function LoadingReport() {
   return (
     <section className="border-t border-border bg-card">
-      <div className="mx-auto max-w-3xl px-5 py-6">
-        <div className="flex items-center gap-3">
-          {state.phase === "loading" ? (
-            <Loader2 size={20} className="animate-spin text-primary" />
-          ) : state.phase === "done" ? (
-            <RiskPill level={state.result.level} />
-          ) : (
-            <MapPin size={20} className="text-muted-foreground" />
-          )}
-          <span className="text-base font-semibold text-muted-foreground">{coords}</span>
-        </div>
-
-        <div className="mt-4">
-          {state.phase === "loading" ? (
-            <p className="py-4 text-base text-muted-foreground">
-              Fetching the latest Sentinel-2 image and computing water-quality
-              indices. This can take a minute.
-            </p>
-          ) : state.phase === "error" ? (
-            <div className="rounded-lg border border-border bg-muted p-4">
-              <p className="font-semibold">Analysis engine not reachable</p>
-              <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
+      <div className="mx-auto max-w-5xl px-5 py-10">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {LOADING_STEPS.map(({ Icon, label }, i) => (
+            <div
+              key={label}
+              className="flex items-center gap-3 rounded-xl border border-border bg-background p-4"
+              style={{ animation: "tidepulse 1.6s ease-in-out infinite", animationDelay: `${i * 0.25}s` }}
+            >
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+                <Icon size={22} />
+              </span>
+              <span className="text-base font-medium text-muted-foreground">{label}</span>
             </div>
-          ) : (
-            <Report result={state.result} lat={state.lat} lng={state.lng} />
-          )}
+          ))}
+        </div>
+        <div className="mt-6 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full w-1/3 rounded-full bg-primary" style={{ animation: "tideslide 1.8s ease-in-out infinite" }} />
+        </div>
+        <p className="mt-4 text-center text-base text-muted-foreground">
+          Pulling a real Sentinel-2 image and analyzing the water. This usually takes a minute.
+        </p>
+      </div>
+      <style>{`
+        @keyframes tidepulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+        @keyframes tideslide { 0%{transform:translateX(-120%)} 100%{transform:translateX(420%)} }
+      `}</style>
+    </section>
+  );
+}
+
+function ErrorReport({ message }: { message: string }) {
+  return (
+    <section className="border-t border-border bg-card">
+      <div className="mx-auto max-w-5xl px-5 py-8">
+        <div className="rounded-xl border border-border bg-muted p-5">
+          <p className="text-lg font-semibold">We couldn&apos;t analyze this spot</p>
+          <p className="mt-1 text-base text-muted-foreground">
+            Try tapping directly on open water (a lake or river). {message}
+          </p>
         </div>
       </div>
     </section>
   );
 }
 
-function Report({
-  result,
-  lat,
-  lng,
-}: {
-  result: Analysis;
-  lat: number;
-  lng: number;
-}) {
+// Friendly, non-technical signals derived from the spectral indices.
+const SIGNALS: { label: string; codes: string[]; higherIsWorse: boolean }[] = [
+  { label: "Algae & greenness", codes: ["NDCI"], higherIsWorse: true },
+  { label: "Cloudiness / sediment", codes: ["NDTI"], higherIsWorse: true },
+  { label: "Open water", codes: ["MNDWI", "NDWI"], higherIsWorse: false },
+];
+
+function signalLevel(pct: number, higherIsWorse: boolean) {
+  const bad = higherIsWorse ? pct : 100 - pct;
+  if (bad < 34) return { word: "Low", color: "var(--risk-safe)" };
+  if (bad < 67) return { word: "Moderate", color: "var(--risk-caution)" };
+  return { word: "High", color: "var(--risk-avoid)" };
+}
+
+function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: number }) {
   const shareUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/map?lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}`
       : "";
-  const alertText = `TideEye water alert for ${lat.toFixed(3)}, ${lng.toFixed(
-    3,
-  )}: risk ${result.level.toUpperCase()} (${result.score}/100). ${result.recommendation}`;
-  const cloud =
-    result.scene.cloudCover != null ? `${result.scene.cloudCover.toFixed(1)}%` : "—";
+  const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.recommendation}`;
+  const cloud = result.scene.cloudCover != null ? `${result.scene.cloudCover.toFixed(0)}%` : "—";
   const captured = result.scene.capturedAt
-    ? new Date(result.scene.capturedAt).toLocaleDateString()
+    ? new Date(result.scene.capturedAt).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
     : "—";
+  const water =
+    result.scene.waterFraction != null ? `${Math.round(result.scene.waterFraction * 100)}%` : "—";
+
+  const bannerBg: Record<string, string> = {
+    safe: "rgba(21,128,61,0.08)",
+    caution: "rgba(180,83,9,0.08)",
+    avoid: "rgba(185,28,28,0.08)",
+    unknown: "rgba(100,116,139,0.08)",
+  };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-xl border border-border bg-background p-4">
-        <span className="text-lg font-semibold">Risk score</span>
-        <span className="tabular text-4xl font-bold">{result.score}</span>
-      </div>
-
-      <div>
-        <h3 className="text-base font-semibold">What this means</h3>
-        <p className="mt-1 text-base leading-relaxed text-muted-foreground">
-          {result.explanation}
-        </p>
-        {result.recommendation ? (
-          <p className="mt-2 text-base leading-relaxed">
-            <span className="font-semibold">Do this: </span>
-            {result.recommendation}
-          </p>
-        ) : null}
-      </div>
-
-      <div>
-        <h3 className="flex items-center gap-2 text-base font-semibold">
-          <Satellite size={16} className="text-primary" /> Satellite scene
-        </h3>
-        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-          <Row label="Provider" value={result.scene.provider ?? "Sentinel-2"} />
-          <Row label="Captured" value={captured} />
-          <Row label="Cloud cover" value={cloud} />
-          <Row
-            label="Water fraction"
-            value={
-              result.scene.waterFraction != null
-                ? `${Math.round(result.scene.waterFraction * 100)}%`
-                : "—"
-            }
-          />
-          <Row label="Scene ID" value={result.scene.sceneId ?? "—"} full mono />
-        </dl>
-      </div>
-
-      {result.indices.length ? (
-        <div>
-          <h3 className="text-base font-semibold">Indices</h3>
-          <div className="mt-2 space-y-1.5">
-            {result.indices.map((idx) => (
-              <div
-                key={idx.code}
-                className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
-              >
-                <span className="tabular text-sm font-semibold text-primary">{idx.code}</span>
-                <span className="text-sm text-muted-foreground">{idx.label}</span>
-                <span className="tabular text-sm font-semibold">{idx.value.toFixed(2)}</span>
-              </div>
-            ))}
+    <section className="border-t border-border bg-card">
+      <div className="mx-auto max-w-5xl px-5 py-8">
+        {/* Verdict banner */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border p-6"
+          style={{ backgroundColor: bannerBg[result.level] }}
+        >
+          <div className="flex items-center gap-4">
+            <RiskPill level={result.level} className="text-base" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Water at this spot</p>
+              <p className="text-2xl font-bold">
+                {result.level === "safe"
+                  ? "Looks OK today"
+                  : result.level === "caution"
+                    ? "Be careful"
+                    : result.level === "avoid"
+                      ? "Avoid this water"
+                      : "Not open water"}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-medium text-muted-foreground">Risk score</p>
+            <p className="tabular text-5xl font-bold leading-none">{result.score}</p>
           </div>
         </div>
-      ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(alertText)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-base font-semibold text-primary-foreground hover:bg-primary-hover"
-        >
-          <MessageCircle size={18} /> Alert
-        </a>
-        <button
-          type="button"
-          onClick={() => navigator.clipboard?.writeText(shareUrl)}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-base font-semibold hover:bg-muted"
-        >
-          <Share2 size={18} /> Share
-        </button>
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-base font-semibold text-muted-foreground opacity-60"
-        >
-          <FileDown size={18} /> PDF
-        </button>
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-base font-semibold text-muted-foreground opacity-60"
-        >
-          <Mail size={18} /> Email
-        </button>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+          {/* Left: explanation + action */}
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-border bg-background p-6">
+              <h3 className="text-lg font-bold">What this means</h3>
+              <p className="mt-2 text-lg leading-relaxed text-muted-foreground">
+                {result.explanation}
+              </p>
+              {result.recommendation ? (
+                <div className="mt-4 rounded-xl bg-muted p-4">
+                  <p className="text-base font-semibold text-primary">What to do</p>
+                  <p className="mt-1 text-base leading-relaxed">{result.recommendation}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(alertText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover"
+              >
+                <MessageCircle size={18} /> Send alert
+              </a>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(shareUrl)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold hover:bg-muted"
+              >
+                <Share2 size={18} /> Share link
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold text-muted-foreground opacity-60"
+              >
+                <FileDown size={18} /> Report PDF
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold text-muted-foreground opacity-60"
+              >
+                <Mail size={18} /> Email it
+              </button>
+            </div>
+          </div>
+
+          {/* Right: signals + scene */}
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-border bg-background p-6">
+              <h3 className="flex items-center gap-2 text-lg font-bold">
+                <Droplets size={18} className="text-primary" /> Water signals
+              </h3>
+              <div className="mt-4 space-y-4">
+                {SIGNALS.map((sig) => {
+                  const idx = result.indices.find((i) => sig.codes.includes(i.code));
+                  if (!idx) return null;
+                  const pct = Math.max(0, Math.min(100, ((idx.value + 0.3) / 0.9) * 100));
+                  const lvl = signalLevel(pct, sig.higherIsWorse);
+                  return (
+                    <div key={sig.label}>
+                      <div className="flex items-center justify-between text-base">
+                        <span className="font-medium">{sig.label}</span>
+                        <span className="font-semibold" style={{ color: lvl.color }}>
+                          {lvl.word}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: lvl.color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-6">
+              <h3 className="flex items-center gap-2 text-lg font-bold">
+                <Satellite size={18} className="text-primary" /> Satellite image used
+              </h3>
+              <dl className="mt-4 space-y-2.5 text-base">
+                <SceneRow label="Taken on" value={captured} />
+                <SceneRow label="Clouds in view" value={cloud} />
+                <SceneRow label="Water in the frame" value={water} />
+                <SceneRow label="Source" value="Sentinel-2 (Copernicus)" />
+              </dl>
+              <p className="mt-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Check size={14} className="text-risk-safe" /> Real satellite data, not a guess
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function Row({
-  label,
-  value,
-  full,
-  mono,
-}: {
-  label: string;
-  value: string;
-  full?: boolean;
-  mono?: boolean;
-}) {
+function SceneRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`flex flex-col ${full ? "col-span-2" : ""}`}>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={`${mono ? "tabular break-all text-xs" : "text-sm"} font-medium`}>
-        {value}
-      </dd>
+    <div className="flex items-center justify-between border-b border-border/60 pb-2 last:border-0 last:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-semibold">{value}</dd>
     </div>
   );
 }

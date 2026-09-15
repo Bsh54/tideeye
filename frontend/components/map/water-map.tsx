@@ -115,10 +115,13 @@ function drawAoi(map: maplibregl.Map, polygon: GeoJSONPolygon) {
 export function WaterMap({
   onSelect,
   flyTo,
+  forceBasemap,
 }: {
   onSelect: (lng: number, lat: number, polygon: GeoJSONPolygon) => void;
   /** When set, the map flies to this point and analyzes it (geolocation flow). */
   flyTo?: { lng: number; lat: number } | null;
+  /** When set, forces the basemap (e.g. terrain once a result is ready). */
+  forceBasemap?: Basemap | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -189,6 +192,11 @@ export function WaterMap({
     map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: 12 });
     selectPoint(map, flyTo.lng, flyTo.lat);
   }, [flyTo]);
+
+  // Parent can force a basemap (e.g. switch to terrain when a result is ready).
+  useEffect(() => {
+    if (forceBasemap) setBasemap(forceBasemap);
+  }, [forceBasemap]);
 
   return (
     <div className="relative h-full w-full">
