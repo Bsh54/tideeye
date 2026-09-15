@@ -1,6 +1,6 @@
 <div align="center">
 
-# TideEye 💧👁️
+<img src="brand/logo.png" alt="TideEye — the eye on the tide" width="380" />
 
 ### The eye on the tide.
 
