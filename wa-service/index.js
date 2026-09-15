@@ -175,15 +175,13 @@ async function placeName(lat, lng) {
   }
   return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
 }
-function headline(result, place) {
-  const lvl = result.risk?.level;
-  const map = {
-    low: "✅ the water looks safe today",
-    medium: "⚠️ please use caution with this water",
-    high: "🚫 avoid this water today",
-  };
-  const word = map[lvl] || "the water was checked";
-  return `TideEye 💧 — ${place}\n${word}.`;
+// The message body is the AI's own words (adaptive per situation), not a
+// canned line. reasoning = what this means, recommendation = what to do.
+function aiMessage(result, place) {
+  const reasoning = (result.risk?.reasoning || result.citizen_summary?.bottom_line || "").trim();
+  const rec = (result.risk?.recommendation || "").trim();
+  const emoji = { low: "✅", medium: "⚠️", high: "🚫" }[result.risk?.level] || "💧";
+  return `TideEye 💧 — ${place}\n\n${emoji} ${reasoning}\n\n${rec}`.trim();
 }
 
 // ---- HTTP ------------------------------------------------------------------
@@ -246,7 +244,7 @@ app.post("/subscribe", requireToken, async (req, res) => {
           `We check this water every day and message you when there is a change. Stay safe! 🙏`,
       );
       if (result) {
-        await sendText(to, headline(result, place));
+        await sendText(to, aiMessage(result, place));
         await sendPdf(to, result.sessionId, place);
       }
     }
@@ -268,7 +266,7 @@ async function checkAll() {
       sub.lastSceneId = result.scene_id;
       saveSubs();
       for (const to of sub.phones) {
-        await sendText(to, "New satellite image available.\n" + headline(result, sub.place));
+        await sendText(to, "🔔 New satellite update:\n\n" + aiMessage(result, sub.place));
         await sendPdf(to, result.sessionId, sub.place);
       }
     }
