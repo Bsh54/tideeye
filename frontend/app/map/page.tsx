@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   FileDown,
-  Mail,
-  Share2,
   MessageCircle,
   MapPin,
   Satellite,
@@ -14,6 +12,9 @@ import {
   BellRing,
   Droplets,
   Check,
+  FlaskConical,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { RiskPill } from "@/components/risk-pill";
@@ -204,15 +205,22 @@ function toActions(recommendation: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+// Full names for the spectral indices, shown in the scientific view.
+const INDEX_FULL: Record<string, string> = {
+  NDCI: "Normalized Difference Chlorophyll Index",
+  NDTI: "Normalized Difference Turbidity Index",
+  NDWI: "Normalized Difference Water Index",
+  MNDWI: "Modified Normalized Difference Water Index",
+  NDVI: "Normalized Difference Vegetation Index",
+  WRI: "Water Ratio Index",
+};
+
 function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: number }) {
-  const shareUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/map?lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}`
-      : "";
   const actions = toActions(result.recommendation);
   const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.explanation} ${result.recommendation}`;
 
   const [alertOpen, setAlertOpen] = useState(false);
+  const [sciOpen, setSciOpen] = useState(false);
   const [phones, setPhones] = useState("");
   const [message, setMessage] = useState(alertText);
   const [sending, setSending] = useState(false);
@@ -319,24 +327,10 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
               </button>
               <button
                 type="button"
-                onClick={() => navigator.clipboard?.writeText(shareUrl)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold hover:bg-muted"
-              >
-                <Share2 size={18} /> Share link
-              </button>
-              <button
-                type="button"
                 disabled
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold text-muted-foreground opacity-60"
               >
                 <FileDown size={18} /> Report PDF
-              </button>
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold text-muted-foreground opacity-60"
-              >
-                <Mail size={18} /> Email it
               </button>
             </div>
 
@@ -427,8 +421,106 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
             </div>
           </div>
         </div>
+
+        {/* Scientific analysis (opt-in, for credibility / technical readers) */}
+        <div className="mt-6 rounded-2xl border border-border bg-background">
+          <button
+            type="button"
+            onClick={() => setSciOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-6 py-4"
+          >
+            <span className="inline-flex items-center gap-2 text-lg font-bold">
+              <FlaskConical size={18} className="text-primary" /> Scientific analysis
+            </span>
+            {sciOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+          {sciOpen ? (
+            <div className="space-y-6 border-t border-border px-6 py-5">
+              <div>
+                <p className="text-base font-semibold">Spectral indices (Sentinel-2 L2A)</p>
+                <div className="mt-3 overflow-hidden rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted text-left">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold">Index</th>
+                        <th className="px-3 py-2 font-semibold">Name</th>
+                        <th className="px-3 py-2 text-right font-semibold">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.indices.map((idx) => (
+                        <tr key={idx.code} className="border-t border-border">
+                          <td className="tabular px-3 py-2 font-semibold text-primary">{idx.code}</td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {INDEX_FULL[idx.code] ?? idx.label}
+                          </td>
+                          <td className="tabular px-3 py-2 text-right font-semibold">
+                            {idx.value.toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <p className="text-base font-semibold">Risk model</p>
+                  <dl className="mt-2 space-y-1.5 text-sm">
+                    <SciRow label="Risk score" value={`${result.score} / 100`} />
+                    <SciRow label="Normalized score" value={(result.score / 100).toFixed(2)} />
+                    <SciRow label="Risk level" value={result.level} />
+                    <SciRow label="AOI type" value={result.aoiType ?? "—"} />
+                  </dl>
+                </div>
+                <div>
+                  <p className="text-base font-semibold">Scene provenance</p>
+                  <dl className="mt-2 space-y-1.5 text-sm">
+                    <SciRow label="Provider" value={result.scene.provider ?? "Sentinel-2"} />
+                    <SciRow
+                      label="Captured"
+                      value={result.scene.capturedAt ? new Date(result.scene.capturedAt).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "—"}
+                    />
+                    <SciRow
+                      label="Cloud cover"
+                      value={result.scene.cloudCover != null ? `${result.scene.cloudCover.toFixed(1)}%` : "—"}
+                    />
+                    <SciRow
+                      label="Water fraction"
+                      value={result.scene.waterFraction != null ? result.scene.waterFraction.toFixed(3) : "—"}
+                    />
+                  </dl>
+                </div>
+              </div>
+
+              {result.scene.sceneId ? (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground">Scene ID</p>
+                  <p className="tabular mt-1 break-all text-xs">{result.scene.sceneId}</p>
+                </div>
+              ) : null}
+
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Method: six normalized-difference indices are computed on the water mask of a
+                Sentinel-2 L2A scene (Microsoft Planetary Computer). A deterministic model turns
+                them into the 0–100 risk score. The plain-language summary above is written by an
+                AI from these same numbers, but never changes the score.
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
+  );
+}
+
+function SciRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border/60 pb-1.5 last:border-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-medium capitalize">{value}</dd>
+    </div>
   );
 }
 
