@@ -15,6 +15,7 @@ export type Scene = {
 };
 
 export type Analysis = {
+  sessionId: string;
   score: number; // 0..100
   level: RiskLevel;
   aoiType: string | null; // "water" | "mixed" | "land"
@@ -95,6 +96,7 @@ export async function analyzePoint(
 }
 
 type SessionRead = {
+  id?: string;
   status: string;
   status_message?: string | null;
   aoi_type?: string | null;
@@ -132,6 +134,7 @@ function mapResult(data: SessionRead): Analysis {
   // still has a usable water signal, so we show the result.
   if (data.aoi_type === "land") {
     return {
+      sessionId: data.id ?? "",
       score: 0,
       level: "unknown",
       aoiType: "land",
@@ -157,6 +160,7 @@ function mapResult(data: SessionRead): Analysis {
     data.citizen_summary?.headline ??
     "Analysis complete.";
   return {
+    sessionId: data.id ?? "",
     score: risk ? Math.round(risk.score * 100) : 0,
     level: risk ? (LEVEL_MAP[risk.level] ?? "unknown") : "unknown",
     aoiType: data.aoi_type ?? "water",

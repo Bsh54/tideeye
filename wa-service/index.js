@@ -178,12 +178,12 @@ async function placeName(lat, lng) {
 function headline(result, place) {
   const lvl = result.risk?.level;
   const map = {
-    low: "the water looks safe today",
-    medium: "use caution with this water",
-    high: "avoid this water today",
+    low: "✅ the water looks safe today",
+    medium: "⚠️ please use caution with this water",
+    high: "🚫 avoid this water today",
   };
   const word = map[lvl] || "the water was checked";
-  return `TideEye — ${place}\nUpdate: ${word}.`;
+  return `TideEye 💧 — ${place}\n${word}.`;
 }
 
 // ---- HTTP ------------------------------------------------------------------
@@ -242,8 +242,8 @@ app.post("/subscribe", requireToken, async (req, res) => {
     for (const to of list) {
       await sendText(
         to,
-        `Hello! You are now subscribed to TideEye water alerts for ${place}. ` +
-          `We check this water every day and message you when the satellite sees a change. Stay safe.`,
+        `Hello! 👋 You are now subscribed to TideEye water alerts for ${place} 💧. ` +
+          `We check this water every day and message you when there is a change. Stay safe! 🙏`,
       );
       if (result) {
         await sendText(to, headline(result, place));

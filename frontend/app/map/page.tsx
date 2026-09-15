@@ -250,6 +250,8 @@ const INDEX_FULL: Record<string, string> = {
 
 function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: number }) {
   const actions = toActions(result.recommendation);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const pdfUrl = result.sessionId ? `${apiBase}/api/v1/sessions/${result.sessionId}/report` : "";
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [sciOpen, setSciOpen] = useState(false);
@@ -363,13 +365,16 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
               >
                 <BellRing size={18} /> Configure alert
               </button>
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold text-muted-foreground opacity-60"
+              <a
+                href={pdfUrl || undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3.5 text-base font-semibold ${
+                  pdfUrl ? "hover:bg-muted" : "pointer-events-none opacity-60 text-muted-foreground"
+                }`}
               >
                 <FileDown size={18} /> Report PDF
-              </button>
+              </a>
             </div>
 
             {alertOpen ? (
@@ -481,19 +486,21 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
           </button>
           {sciOpen ? (
             <div className="space-y-6 border-t border-border px-6 py-5">
-              <div>
-                <p className="text-base font-semibold">Satellite view of this area</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lng - 0.012},${lat - 0.012},${lng + 0.012},${lat + 0.012}&bboxSR=4326&imageSR=4326&size=760,440&format=jpg&f=image`}
-                  alt="Satellite view of the analyzed area"
-                  className="mt-3 w-full rounded-lg border border-border"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Esri World Imagery of the ~1&nbsp;km area analysed. The spectral indices below
-                  are computed on the water inside this box from a Sentinel-2 scene.
-                </p>
-              </div>
+              {result.scene.sceneId ? (
+                <div>
+                  <p className="text-base font-semibold">The Sentinel-2 image analysed</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png?collection=sentinel-2-l2a&item=${result.scene.sceneId}&assets=visual&asset_bidx=visual|1,2,3&format=png`}
+                    alt="True-colour Sentinel-2 scene"
+                    className="mt-3 w-full rounded-lg border border-border"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    True-colour Sentinel-2 scene from Microsoft Planetary Computer. The indices below
+                    are computed on the water within your ~1&nbsp;km area.
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-base font-semibold">Spectral indices (Sentinel-2 L2A)</p>
                 <div className="mt-3 overflow-hidden rounded-lg border border-border">
