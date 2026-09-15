@@ -6,12 +6,21 @@ import type { GeoJSONPolygon } from "@/lib/point";
 
 export type RiskLevel = "safe" | "caution" | "avoid" | "unknown";
 
+export type Scene = {
+  provider: string | null;
+  sceneId: string | null;
+  capturedAt: string | null;
+  cloudCover: number | null;
+  waterFraction: number | null;
+};
+
 export type Analysis = {
   score: number; // 0..100
   level: RiskLevel;
   recommendation: string;
   explanation: string;
   indices: { code: string; label: string; value: number }[];
+  scene: Scene;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -78,15 +87,34 @@ type SessionRead = {
   status: string;
   status_message?: string | null;
   aoi_type?: string | null;
+  water_fraction?: number | null;
+  scene_id?: string | null;
+  scene_provider?: string | null;
+  scene_capture_date?: string | null;
+  scene_cloud_cover?: number | null;
   risk?: {
     score: number;
     level: string;
     recommendation?: string | null;
     reasoning?: string | null;
-    citizen_summary?: { bottom_line?: string | null } | null;
+  } | null;
+  // Plain-English verdict, computed top-level (not under risk).
+  citizen_summary?: {
+    headline?: string | null;
+    bottom_line?: string | null;
   } | null;
   indices?: { name: string; value: number }[] | null;
 };
+
+function sceneOf(data: SessionRead): Scene {
+  return {
+    provider: data.scene_provider ?? null,
+    sceneId: data.scene_id ?? null,
+    capturedAt: data.scene_capture_date ?? null,
+    cloudCover: data.scene_cloud_cover ?? null,
+    waterFraction: data.water_fraction ?? null,
+  };
+}
 
 function mapResult(data: SessionRead): Analysis {
   if (data.aoi_type && data.aoi_type !== "water") {
@@ -95,8 +123,9 @@ function mapResult(data: SessionRead): Analysis {
       level: "unknown",
       recommendation: "Pick an area over open water for a real reading.",
       explanation:
-        "The selected area is not open water, so water-quality indices are not meaningful here.",
+        "The area you picked is not open water, so we can't judge water quality here. Try clicking on a lake or river.",
       indices: [],
+      scene: sceneOf(data),
     };
   }
   const risk = data.risk;
@@ -105,14 +134,17 @@ function mapResult(data: SessionRead): Analysis {
     label: INDEX_LABELS[i.name] ?? i.name,
     value: i.value,
   }));
+  // Prefer the plain-English citizen summary over the technical reasoning.
+  const explanation =
+    data.citizen_summary?.bottom_line ??
+    data.citizen_summary?.headline ??
+    "Analysis complete.";
   return {
     score: risk ? Math.round(risk.score * 100) : 0,
     level: risk ? (LEVEL_MAP[risk.level] ?? "unknown") : "unknown",
     recommendation: risk?.recommendation ?? "",
-    explanation:
-      risk?.citizen_summary?.bottom_line ??
-      risk?.reasoning ??
-      "Analysis complete.",
+    explanation,
     indices,
+    scene: sceneOf(data),
   };
 }

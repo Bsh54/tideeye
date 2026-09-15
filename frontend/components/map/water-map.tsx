@@ -2,14 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification, type GeoJSONSource } from "maplibre-gl";
-import { Satellite, Map as MapIcon } from "lucide-react";
+import { Satellite, Map as MapIcon, Mountain } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pointToBufferPolygon, type GeoJSONPolygon } from "@/lib/point";
 
-// Two basemaps, no API key required for imagery:
-// - satellite: Esri World Imagery + Carto labels (best for seeing water bodies)
-// - street: Carto Voyager raster tiles
-type Basemap = "satellite" | "street";
+type Basemap = "satellite" | "street" | "terrain";
 
 // CARTO basemaps require a key. Provided via env (public client key).
 const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_KEY ?? "";
@@ -64,18 +61,37 @@ const STREET_STYLE: StyleSpecification = {
   layers: [{ id: "voyager", type: "raster", source: "voyager" }],
 };
 
+const TERRAIN_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    topo: {
+      type: "raster",
+      tiles: [
+        "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+        "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      maxzoom: 17,
+      attribution: "© OpenTopoMap (CC-BY-SA)",
+    },
+  },
+  layers: [{ id: "topo", type: "raster", source: "topo" }],
+};
+
 const STYLES: Record<Basemap, StyleSpecification> = {
   satellite: SATELLITE_STYLE,
   street: STREET_STYLE,
+  terrain: TERRAIN_STYLE,
 };
 
-// Draw (or update) the AOI box: cyan fill + outline, matching the reference.
+const BASEMAPS: { key: Basemap; label: string; Icon: typeof Satellite }[] = [
+  { key: "satellite", label: "Satellite", Icon: Satellite },
+  { key: "street", label: "Street", Icon: MapIcon },
+  { key: "terrain", label: "Terrain", Icon: Mountain },
+];
+
 function drawAoi(map: maplibregl.Map, polygon: GeoJSONPolygon) {
-  const data = {
-    type: "Feature" as const,
-    geometry: polygon,
-    properties: {},
-  };
+  const data = { type: "Feature" as const, geometry: polygon, properties: {} };
   const existing = map.getSource(AOI_SOURCE) as GeoJSONSource | undefined;
   if (existing) {
     existing.setData(data);
@@ -98,8 +114,11 @@ function drawAoi(map: maplibregl.Map, polygon: GeoJSONPolygon) {
 
 export function WaterMap({
   onSelect,
+  flyTo,
 }: {
   onSelect: (lng: number, lat: number, polygon: GeoJSONPolygon) => void;
+  /** When set, the map flies to this point and analyzes it (geolocation flow). */
+  flyTo?: { lng: number; lat: number } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -109,32 +128,30 @@ export function WaterMap({
   onSelectRef.current = onSelect;
   const [basemap, setBasemap] = useState<Basemap>("satellite");
 
+  const selectPoint = (map: maplibregl.Map, lng: number, lat: number) => {
+    const polygon = pointToBufferPolygon(lng, lat, 1);
+    polygonRef.current = polygon;
+    if (!markerRef.current) {
+      markerRef.current = new maplibregl.Marker({ color: "#06b6d4" })
+        .setLngLat([lng, lat])
+        .addTo(map);
+    } else {
+      markerRef.current.setLngLat([lng, lat]);
+    }
+    drawAoi(map, polygon);
+    onSelectRef.current(lng, lat, polygon);
+  };
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: STYLES.satellite,
-      center: [32.9, -1.0], // Lake Victoria region
+      center: [32.9, -1.0],
       zoom: 6,
     });
     map.addControl(new maplibregl.NavigationControl({}), "top-right");
-
-    map.on("click", (e) => {
-      const { lng, lat } = e.lngLat;
-      const polygon = pointToBufferPolygon(lng, lat, 1);
-      polygonRef.current = polygon;
-      if (!markerRef.current) {
-        markerRef.current = new maplibregl.Marker({ color: "#06b6d4" })
-          .setLngLat([lng, lat])
-          .addTo(map);
-      } else {
-        markerRef.current.setLngLat([lng, lat]);
-      }
-      drawAoi(map, polygon);
-      onSelectRef.current(lng, lat, polygon);
-    });
-
+    map.on("click", (e) => selectPoint(map, e.lngLat.lng, e.lngLat.lat));
     mapRef.current = map;
     return () => {
       map.remove();
@@ -142,8 +159,6 @@ export function WaterMap({
     };
   }, []);
 
-  // Swap basemap and re-draw the AOI once the new style has loaded
-  // (setStyle removes custom sources/layers).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -153,24 +168,33 @@ export function WaterMap({
     });
   }, [basemap]);
 
+  // Geolocation flow: fly to the given point and analyze it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !flyTo) return;
+    map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: 12 });
+    selectPoint(map, flyTo.lng, flyTo.lat);
+  }, [flyTo]);
+
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
-      <button
-        type="button"
-        onClick={() => setBasemap((b) => (b === "satellite" ? "street" : "satellite"))}
-        className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold shadow-card hover:bg-muted"
-      >
-        {basemap === "satellite" ? (
-          <>
-            <MapIcon size={16} /> Street view
-          </>
-        ) : (
-          <>
-            <Satellite size={16} /> Satellite view
-          </>
-        )}
-      </button>
+      <div className="absolute bottom-4 left-4 inline-flex overflow-hidden rounded-lg border border-border bg-card shadow-card">
+        {BASEMAPS.map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setBasemap(key)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-colors ${
+              basemap === key
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <Icon size={15} /> {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
