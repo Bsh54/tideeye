@@ -57,9 +57,10 @@ export async function analyzePoint(
   if (!createRes.ok) throw new Error(`Backend returned ${createRes.status}`);
   const session = (await createRes.json()) as { id: string };
 
-  // 2. Poll until the pipeline finishes.
-  for (let i = 0; i < 40; i++) {
-    await sleep(2500);
+  // 2. Poll until the pipeline finishes. The primary LLM can take ~90s, plus
+  //    satellite fetch, so allow a generous budget (~4.5 min).
+  for (let i = 0; i < 90; i++) {
+    await sleep(3000);
     const res = await fetch(`${API_BASE}/api/v1/sessions/${session.id}`);
     if (!res.ok) continue;
     const data = (await res.json()) as SessionRead;
