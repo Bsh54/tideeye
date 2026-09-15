@@ -2,6 +2,8 @@
 // It drives the backend session flow: create a monitoring session on the clicked
 // point, poll until it completes, then map the risk row + indices into a verdict.
 
+import type { GeoJSONPolygon } from "@/lib/point";
+
 export type RiskLevel = "safe" | "caution" | "avoid" | "unknown";
 
 export type Analysis = {
@@ -29,32 +31,25 @@ const LEVEL_MAP: Record<string, RiskLevel> = {
   high: "avoid",
 };
 
-// Build a small closed square polygon (~1 km) around the clicked point.
-function bufferPolygon(lng: number, lat: number) {
-  const d = 0.006;
-  const ring = [
-    [lng - d, lat - d],
-    [lng + d, lat - d],
-    [lng + d, lat + d],
-    [lng - d, lat + d],
-    [lng - d, lat - d],
-  ];
-  return { type: "Polygon" as const, coordinates: [ring] };
-}
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function analyzePoint(lng: number, lat: number): Promise<Analysis> {
+// The polygon is the AOI box drawn on the map, so the analyzed zone matches
+// exactly what the user sees framed.
+export async function analyzePoint(
+  lng: number,
+  lat: number,
+  polygon: GeoJSONPolygon,
+): Promise<Analysis> {
   if (!API_BASE) throw new Error("Analysis backend is not configured yet.");
 
-  // 1. Create a session on a buffered polygon around the point.
+  // 1. Create a session on the AOI polygon.
   const createRes = await fetch(`${API_BASE}/api/v1/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       new_water_body: {
         name: `Point ${lat.toFixed(3)}, ${lng.toFixed(3)}`,
-        geometry: bufferPolygon(lng, lat),
+        geometry: polygon,
       },
       max_cloud_cover: 40,
     }),

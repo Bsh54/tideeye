@@ -15,6 +15,7 @@ import { Logo } from "@/components/logo";
 import { RiskPill } from "@/components/risk-pill";
 import { WaterMap } from "@/components/map/water-map";
 import { analyzePoint, type Analysis } from "@/lib/analyze";
+import type { GeoJSONPolygon } from "@/lib/point";
 
 type State =
   | { phase: "idle" }
@@ -25,9 +26,9 @@ type State =
 export default function MapPage() {
   const [state, setState] = useState<State>({ phase: "idle" });
 
-  const handleSelect = useCallback((lng: number, lat: number) => {
+  const handleSelect = useCallback((lng: number, lat: number, polygon: GeoJSONPolygon) => {
     setState({ phase: "loading", lng, lat });
-    analyzePoint(lng, lat)
+    analyzePoint(lng, lat, polygon)
       .then((result) => setState({ phase: "done", lng, lat, result }))
       .catch((err: unknown) =>
         setState({

@@ -1,18 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type StyleSpecification } from "maplibre-gl";
+import maplibregl, { type StyleSpecification, type GeoJSONSource } from "maplibre-gl";
 import { Satellite, Map as MapIcon } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { pointToBufferPolygon, type GeoJSONPolygon } from "@/lib/point";
 
-// Two basemaps, no API key required:
+// Two basemaps, no API key required for imagery:
 // - satellite: Esri World Imagery + Carto labels (best for seeing water bodies)
 // - street: Carto Voyager raster tiles
 type Basemap = "satellite" | "street";
 
-// CARTO basemaps now require a key. Provided via env (public client key).
+// CARTO basemaps require a key. Provided via env (public client key).
 const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_KEY ?? "";
 const cartoSuffix = CARTO_KEY ? `?key=${CARTO_KEY}` : "";
+
+const AOI_SOURCE = "aoi";
+const AOI_FILL = "aoi-fill";
+const AOI_LINE = "aoi-line";
 
 const SATELLITE_STYLE: StyleSpecification = {
   version: 8,
@@ -64,14 +69,42 @@ const STYLES: Record<Basemap, StyleSpecification> = {
   street: STREET_STYLE,
 };
 
+// Draw (or update) the AOI box: cyan fill + outline, matching the reference.
+function drawAoi(map: maplibregl.Map, polygon: GeoJSONPolygon) {
+  const data = {
+    type: "Feature" as const,
+    geometry: polygon,
+    properties: {},
+  };
+  const existing = map.getSource(AOI_SOURCE) as GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  map.addSource(AOI_SOURCE, { type: "geojson", data });
+  map.addLayer({
+    id: AOI_FILL,
+    type: "fill",
+    source: AOI_SOURCE,
+    paint: { "fill-color": "#06b6d4", "fill-opacity": 0.14 },
+  });
+  map.addLayer({
+    id: AOI_LINE,
+    type: "line",
+    source: AOI_SOURCE,
+    paint: { "line-color": "#06b6d4", "line-width": 1.8 },
+  });
+}
+
 export function WaterMap({
   onSelect,
 }: {
-  onSelect: (lng: number, lat: number) => void;
+  onSelect: (lng: number, lat: number, polygon: GeoJSONPolygon) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const polygonRef = useRef<GeoJSONPolygon | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const [basemap, setBasemap] = useState<Basemap>("satellite");
@@ -89,6 +122,8 @@ export function WaterMap({
 
     map.on("click", (e) => {
       const { lng, lat } = e.lngLat;
+      const polygon = pointToBufferPolygon(lng, lat, 1);
+      polygonRef.current = polygon;
       if (!markerRef.current) {
         markerRef.current = new maplibregl.Marker({ color: "#06b6d4" })
           .setLngLat([lng, lat])
@@ -96,7 +131,8 @@ export function WaterMap({
       } else {
         markerRef.current.setLngLat([lng, lat]);
       }
-      onSelectRef.current(lng, lat);
+      drawAoi(map, polygon);
+      onSelectRef.current(lng, lat, polygon);
     });
 
     mapRef.current = map;
@@ -106,8 +142,15 @@ export function WaterMap({
     };
   }, []);
 
+  // Swap basemap and re-draw the AOI once the new style has loaded
+  // (setStyle removes custom sources/layers).
   useEffect(() => {
-    mapRef.current?.setStyle(STYLES[basemap], { diff: false });
+    const map = mapRef.current;
+    if (!map) return;
+    map.setStyle(STYLES[basemap], { diff: false });
+    map.once("styledata", () => {
+      if (polygonRef.current) drawAoi(map, polygonRef.current);
+    });
   }, [basemap]);
 
   return (
