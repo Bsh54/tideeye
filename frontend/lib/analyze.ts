@@ -17,6 +17,7 @@ export type Scene = {
 export type Analysis = {
   score: number; // 0..100
   level: RiskLevel;
+  aoiType: string | null; // "water" | "mixed" | "land"
   recommendation: string;
   explanation: string;
   indices: { code: string; label: string; value: number }[];
@@ -131,6 +132,7 @@ function mapResult(data: SessionRead): Analysis {
     return {
       score: 0,
       level: "unknown",
+      aoiType: "land",
       recommendation: "Try tapping a little further into the water (a lake, river, or the sea).",
       explanation:
         "This spot is mostly dry land, so there's no water here for the satellite to read. Move your pin onto open water and try again.",
@@ -144,14 +146,17 @@ function mapResult(data: SessionRead): Analysis {
     label: INDEX_LABELS[i.name] ?? i.name,
     value: i.value,
   }));
-  // Prefer the plain-English citizen summary over the technical reasoning.
+  // The AI (reasoning) is now written in plain language by the prompt, so use
+  // it directly; fall back to the deterministic citizen summary.
   const explanation =
+    risk?.reasoning ??
     data.citizen_summary?.bottom_line ??
     data.citizen_summary?.headline ??
     "Analysis complete.";
   return {
     score: risk ? Math.round(risk.score * 100) : 0,
     level: risk ? (LEVEL_MAP[risk.level] ?? "unknown") : "unknown",
+    aoiType: data.aoi_type ?? "water",
     recommendation: risk?.recommendation ?? "",
     explanation,
     indices,

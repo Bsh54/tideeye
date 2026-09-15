@@ -196,12 +196,21 @@ function signalLevel(pct: number, higherIsWorse: boolean) {
   return { word: "High", color: "var(--risk-avoid)" };
 }
 
+// Split the AI recommendation (plain sentences) into individual action steps.
+function toActions(recommendation: string): string[] {
+  return recommendation
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: number }) {
   const shareUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/map?lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}`
       : "";
-  const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.recommendation}`;
+  const actions = toActions(result.recommendation);
+  const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.explanation} ${result.recommendation}`;
   const cloud = result.scene.cloudCover != null ? `${result.scene.cloudCover.toFixed(0)}%` : "—";
   const captured = result.scene.capturedAt
     ? new Date(result.scene.capturedAt).toLocaleDateString(undefined, {
@@ -257,10 +266,17 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
               <p className="mt-2 text-lg leading-relaxed text-muted-foreground">
                 {result.explanation}
               </p>
-              {result.recommendation ? (
-                <div className="mt-4 rounded-xl bg-muted p-4">
+              {actions.length ? (
+                <div className="mt-5">
                   <p className="text-base font-semibold text-primary">What to do</p>
-                  <p className="mt-1 text-base leading-relaxed">{result.recommendation}</p>
+                  <ul className="mt-2 space-y-2">
+                    {actions.map((a) => (
+                      <li key={a} className="flex items-start gap-2.5 text-base leading-relaxed">
+                        <Check size={18} className="mt-0.5 shrink-0 text-primary" />
+                        <span>{a}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
             </div>
