@@ -11,8 +11,6 @@ import {
   MessageCircle,
   MapPin,
   Satellite,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { RiskPill } from "@/components/risk-pill";
@@ -30,10 +28,8 @@ export default function MapPage() {
   const [state, setState] = useState<State>({ phase: "idle" });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
   const [askLocation, setAskLocation] = useState(true);
-  const [expanded, setExpanded] = useState(true);
 
   const runAnalysis = useCallback((lng: number, lat: number, polygon: GeoJSONPolygon) => {
-    setExpanded(true);
     setState({ phase: "loading", lng, lat });
     analyzePoint(lng, lat, polygon)
       .then((result) => setState({ phase: "done", lng, lat, result }))
@@ -71,27 +67,26 @@ export default function MapPage() {
         </Link>
       </header>
 
-      <div className="relative flex-1 overflow-hidden">
-        <WaterMap onSelect={runAnalysis} flyTo={flyTo} />
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {/* Map on top. It shrinks to make room for the report when analysis runs. */}
+        <div
+          className={`relative ${
+            state.phase === "idle" ? "flex-1" : "h-[52vh] shrink-0"
+          }`}
+        >
+          <WaterMap onSelect={runAnalysis} flyTo={flyTo} />
+          {state.phase === "idle" ? (
+            <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-lg bg-card/90 px-4 py-2 text-sm font-medium shadow-card backdrop-blur">
+              Click a water point to analyze it.
+            </div>
+          ) : null}
+          {askLocation ? (
+            <LocationPrompt onYes={useMyLocation} onNo={() => setAskLocation(false)} />
+          ) : null}
+        </div>
 
-        {state.phase !== "idle" ? (
-          <BottomReport
-            state={state}
-            expanded={expanded}
-            onToggle={() => setExpanded((v) => !v)}
-          />
-        ) : (
-          <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-lg bg-card/90 px-4 py-2 text-sm font-medium shadow-card backdrop-blur">
-            Click a water point to analyze it.
-          </div>
-        )}
-
-        {askLocation ? (
-          <LocationPrompt
-            onYes={useMyLocation}
-            onNo={() => setAskLocation(false)}
-          />
-        ) : null}
+        {/* Report below the map, in normal flow (classic stacked layout). */}
+        {state.phase !== "idle" ? <ReportSection state={state} /> : null}
       </div>
     </main>
   );
@@ -130,58 +125,39 @@ function LocationPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }
   );
 }
 
-function BottomReport({
-  state,
-  expanded,
-  onToggle,
-}: {
-  state: Exclude<State, { phase: "idle" }>;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
+function ReportSection({ state }: { state: Exclude<State, { phase: "idle" }> }) {
   const coords = `${state.lat.toFixed(4)}, ${state.lng.toFixed(4)}`;
   return (
-    <div className="absolute inset-x-0 bottom-0 z-10">
-      <div className="mx-auto max-w-3xl px-3 pb-3">
-        <div className="rounded-t-2xl border border-border bg-card shadow-lift">
-          <button
-            type="button"
-            onClick={onToggle}
-            className="flex w-full items-center justify-between px-5 py-3"
-          >
-            <span className="inline-flex items-center gap-3 text-base font-semibold">
-              {state.phase === "loading" ? (
-                <Loader2 size={18} className="animate-spin text-primary" />
-              ) : state.phase === "done" ? (
-                <RiskPill level={state.result.level} />
-              ) : (
-                <MapPin size={18} className="text-muted-foreground" />
-              )}
-              <span className="text-muted-foreground">{coords}</span>
-            </span>
-            {expanded ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-          </button>
+    <section className="border-t border-border bg-card">
+      <div className="mx-auto max-w-3xl px-5 py-6">
+        <div className="flex items-center gap-3">
+          {state.phase === "loading" ? (
+            <Loader2 size={20} className="animate-spin text-primary" />
+          ) : state.phase === "done" ? (
+            <RiskPill level={state.result.level} />
+          ) : (
+            <MapPin size={20} className="text-muted-foreground" />
+          )}
+          <span className="text-base font-semibold text-muted-foreground">{coords}</span>
+        </div>
 
-          {expanded ? (
-            <div className="max-h-[55vh] overflow-y-auto border-t border-border px-5 py-4">
-              {state.phase === "loading" ? (
-                <p className="py-6 text-center text-base text-muted-foreground">
-                  Fetching the latest Sentinel-2 image and computing water-quality
-                  indices. This can take a minute.
-                </p>
-              ) : state.phase === "error" ? (
-                <div className="rounded-lg border border-border bg-muted p-4">
-                  <p className="font-semibold">Analysis engine not reachable</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
-                </div>
-              ) : (
-                <Report result={state.result} lat={state.lat} lng={state.lng} />
-              )}
+        <div className="mt-4">
+          {state.phase === "loading" ? (
+            <p className="py-4 text-base text-muted-foreground">
+              Fetching the latest Sentinel-2 image and computing water-quality
+              indices. This can take a minute.
+            </p>
+          ) : state.phase === "error" ? (
+            <div className="rounded-lg border border-border bg-muted p-4">
+              <p className="font-semibold">Analysis engine not reachable</p>
+              <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
             </div>
-          ) : null}
+          ) : (
+            <Report result={state.result} lat={state.lat} lng={state.lng} />
+          )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

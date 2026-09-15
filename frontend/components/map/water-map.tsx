@@ -153,7 +153,14 @@ export function WaterMap({
     map.addControl(new maplibregl.NavigationControl({}), "top-right");
     map.on("click", (e) => selectPoint(map, e.lngLat.lng, e.lngLat.lat));
     mapRef.current = map;
+
+    // Resize the map when its container changes size (e.g. it shrinks to the
+    // top when the report appears below it).
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(containerRef.current);
+
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };
