@@ -125,13 +125,15 @@ function sceneOf(data: SessionRead): Scene {
 }
 
 function mapResult(data: SessionRead): Analysis {
-  if (data.aoi_type && data.aoi_type !== "water") {
+  // Only block when the spot is essentially land. "mixed" (a shoreline/beach)
+  // still has a usable water signal, so we show the result.
+  if (data.aoi_type === "land") {
     return {
       score: 0,
       level: "unknown",
-      recommendation: "Pick an area over open water for a real reading.",
+      recommendation: "Try tapping a little further into the water (a lake, river, or the sea).",
       explanation:
-        "The area you picked is not open water, so we can't judge water quality here. Try clicking on a lake or river.",
+        "This spot is mostly dry land, so there's no water here for the satellite to read. Move your pin onto open water and try again.",
       indices: [],
       scene: sceneOf(data),
     };
