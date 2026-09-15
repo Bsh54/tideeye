@@ -5,6 +5,12 @@
 /* TideEye design tokens — deep-water + health palette. Light mode by default
    for field/sunlight readability. See design-system/MASTER.md. */
 :root {
+  /* Fonts are loaded via <link> in layout.tsx (browser-side), so the build
+     never needs network access to Google Fonts. */
+  --font-heading: "Lexend", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
