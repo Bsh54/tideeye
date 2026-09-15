@@ -69,7 +69,9 @@ export async function analyzePoint(
       },
       start_date: iso(start),
       end_date: iso(end),
-      max_cloud_cover: 70,
+      // Prefer a CLEAR recent scene over a fresh cloudy one: a wide window
+      // (120 days) plus a low cloud ceiling avoids "the image was unclear".
+      max_cloud_cover: 30,
     }),
   });
   if (!createRes.ok) throw new Error(`Backend returned ${createRes.status}`);
