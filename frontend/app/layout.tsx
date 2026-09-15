@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TideEye — The eye on the tide",
+  title: "TideEye · The eye on the tide",
   description:
     "Satellite + AI water-quality monitoring that turns imagery into an actionable alert for communities with no lab or sensors.",
 };
