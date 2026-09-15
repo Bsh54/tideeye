@@ -10,6 +10,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // - street: Carto Voyager raster tiles
 type Basemap = "satellite" | "street";
 
+// CARTO basemaps now require a key. Provided via env (public client key).
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_KEY ?? "";
+const cartoSuffix = CARTO_KEY ? `?key=${CARTO_KEY}` : "";
+
 const SATELLITE_STYLE: StyleSpecification = {
   version: 8,
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
@@ -25,8 +29,8 @@ const SATELLITE_STYLE: StyleSpecification = {
     labels: {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png",
+        `https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png${cartoSuffix}`,
+        `https://b.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png${cartoSuffix}`,
       ],
       tileSize: 256,
       attribution: "© CARTO",
@@ -45,8 +49,8 @@ const STREET_STYLE: StyleSpecification = {
     voyager: {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        `https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoSuffix}`,
+        `https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoSuffix}`,
       ],
       tileSize: 256,
       attribution: "© OpenStreetMap contributors © CARTO",
