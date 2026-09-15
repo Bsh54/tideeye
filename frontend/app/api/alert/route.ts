@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Server-side only: the Zavu key stays on the server, never in the browser.
-const ZAVU_KEY = process.env.ZAVU_API_KEY ?? "";
-const ZAVU_URL = "https://api.zavu.dev/v1/messages";
+// Server-side only: sends WhatsApp messages through the TideEye WA service
+// (Baileys), which is linked to the user's own WhatsApp account.
+const WA_URL = process.env.WA_SERVICE_URL ?? "";
+const WA_TOKEN = process.env.WA_TOKEN ?? "";
 
 export async function POST(req: NextRequest) {
-  if (!ZAVU_KEY) {
+  if (!WA_URL) {
     return NextResponse.json({ error: "Alerts are not configured yet." }, { status: 503 });
   }
 
@@ -23,19 +24,18 @@ export async function POST(req: NextRequest) {
     .filter((p) => p.length > 0);
 
   if (!text || phones.length === 0) {
-    return NextResponse.json({ error: "A message and at least one number are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "A message and at least one number are required." },
+      { status: 400 },
+    );
   }
 
-  // Smart Routing: omit channel so Zavu tries WhatsApp then falls back to SMS.
   const results = await Promise.all(
     phones.map(async (to) => {
       try {
-        const r = await fetch(ZAVU_URL, {
+        const r = await fetch(`${WA_URL}/send`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${ZAVU_KEY}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json", "x-token": WA_TOKEN },
           body: JSON.stringify({ to, text }),
         });
         return { to, ok: r.ok, status: r.status };
