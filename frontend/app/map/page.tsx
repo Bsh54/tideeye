@@ -211,6 +211,34 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
       : "";
   const actions = toActions(result.recommendation);
   const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.explanation} ${result.recommendation}`;
+
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [phones, setPhones] = useState("");
+  const [message, setMessage] = useState(alertText);
+  const [sending, setSending] = useState(false);
+  const [alertStatus, setAlertStatus] = useState<string | null>(null);
+
+  const sendAlert = async () => {
+    const list = phones.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    if (list.length === 0) {
+      setAlertStatus("Enter at least one phone number.");
+      return;
+    }
+    setSending(true);
+    setAlertStatus(null);
+    try {
+      const r = await fetch("/api/alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phones: list, text: message }),
+      });
+      const d = await r.json();
+      setAlertStatus(r.ok ? `Sent to ${d.sent}/${d.total}.` : d.error ?? "Could not send.");
+    } catch {
+      setAlertStatus("Could not send.");
+    }
+    setSending(false);
+  };
   const cloud = result.scene.cloudCover != null ? `${result.scene.cloudCover.toFixed(0)}%` : "—";
   const captured = result.scene.capturedAt
     ? new Date(result.scene.capturedAt).toLocaleDateString(undefined, {
@@ -282,14 +310,13 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(alertText)}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => setAlertOpen((v) => !v)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover"
               >
                 <MessageCircle size={18} /> Send alert
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={() => navigator.clipboard?.writeText(shareUrl)}
@@ -312,6 +339,44 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
                 <Mail size={18} /> Email it
               </button>
             </div>
+
+            {alertOpen ? (
+              <div className="rounded-2xl border border-border bg-background p-5">
+                <p className="text-base font-semibold">Send this alert by SMS / WhatsApp</p>
+                <label className="mt-3 block text-sm font-medium text-muted-foreground">
+                  Phone numbers (one per line, with country code)
+                </label>
+                <textarea
+                  value={phones}
+                  onChange={(e) => setPhones(e.target.value)}
+                  rows={3}
+                  placeholder={"+22990000000\n+22991111111"}
+                  className="mt-1 w-full rounded-lg border border-border bg-card p-3 font-mono text-sm outline-none focus:border-primary"
+                />
+                <label className="mt-3 block text-sm font-medium text-muted-foreground">
+                  Message
+                </label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full rounded-lg border border-border bg-card p-3 text-sm outline-none focus:border-primary"
+                />
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={sendAlert}
+                    disabled={sending}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+                  >
+                    <MessageCircle size={16} /> {sending ? "Sending…" : "Send now"}
+                  </button>
+                  {alertStatus ? (
+                    <span className="text-sm font-medium text-muted-foreground">{alertStatus}</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Right: signals + scene */}
