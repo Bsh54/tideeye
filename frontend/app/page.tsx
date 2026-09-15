@@ -4,7 +4,6 @@ import {
   Satellite,
   Activity,
   BellRing,
-  Search,
   ArrowRight,
   Droplets,
   Waves,
@@ -69,48 +68,31 @@ function Hero() {
             Just a satellite and a clear alert.
           </p>
 
-          <form className="mt-9 flex max-w-lg items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-card">
-            <Search size={22} className="ml-2 shrink-0 text-muted-foreground" />
-            <input
-              className="w-full bg-transparent px-2 py-2.5 text-lg outline-none placeholder:text-muted-foreground"
-              placeholder="Search a lake, river or place"
-              aria-label="Search a water point"
-            />
+          <div className="mt-9 flex flex-wrap items-center gap-4">
             <Link
               href="/map"
-              className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-lg font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-4 text-lg font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              Analyze
+              Analyze a water point <ArrowRight size={20} />
             </Link>
-          </form>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Or explore the live map, no sign-up needed.
-          </p>
+            <Link
+              href="/map"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-7 py-4 text-lg font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              Explore the live map
+            </Link>
+          </div>
         </div>
 
-        <div className="relative">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-xl shadow-lift">
-            <Image
-              src="/images/landing/woman-handpump-nigeria.jpg"
-              alt="A woman drawing water from a hand pump"
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
-            />
-          </div>
-          <div className="absolute -bottom-6 -left-4 w-64 rounded-xl border border-border bg-card p-5 shadow-lift">
-            <span className="text-base font-semibold text-muted-foreground">
-              Lake Victoria, today
-            </span>
-            <div className="mt-3 flex items-center justify-between">
-              <RiskPill level="caution" />
-              <span className="tabular text-3xl font-bold">61</span>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Elevated chlorophyll, possible algae. Boil before drinking.
-            </p>
-          </div>
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl shadow-lift">
+          <Image
+            src="/images/landing/woman-handpump-nigeria.jpg"
+            alt="A woman drawing water from a hand pump"
+            fill
+            priority
+            sizes="(max-width: 768px) 100vw, 50vw"
+            className="object-cover"
+          />
         </div>
       </div>
     </section>
