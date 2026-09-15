@@ -5,7 +5,7 @@ export function Logo({ className = "" }: { className?: string }) {
     <img
       src="/logo.png"
       alt="TideEye — the eye on the tide"
-      className={`h-14 w-auto ${className}`}
+      className={`h-16 w-auto sm:h-20 ${className}`}
     />
   );
 }
