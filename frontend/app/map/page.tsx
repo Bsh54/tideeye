@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   FileDown,
-  MessageCircle,
   MapPin,
   Satellite,
   Activity,
@@ -15,6 +14,8 @@ import {
   FlaskConical,
   ChevronDown,
   ChevronUp,
+  Loader2,
+  X,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { RiskPill } from "@/components/risk-pill";
@@ -136,34 +137,66 @@ const LOADING_STEPS = [
 ];
 
 function LoadingReport() {
+  // Advance through the steps over time (no real progress events, so we pace it).
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setStep(1), 18000);
+    const t2 = setTimeout(() => setStep(2), 45000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   return (
     <section className="border-t border-border bg-card">
-      <div className="mx-auto max-w-5xl px-5 py-10">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {LOADING_STEPS.map(({ Icon, label }, i) => (
-            <div
-              key={label}
-              className="flex items-center gap-3 rounded-xl border border-border bg-background p-4"
-              style={{ animation: "tidepulse 1.6s ease-in-out infinite", animationDelay: `${i * 0.25}s` }}
-            >
-              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
-                <Icon size={22} />
-              </span>
-              <span className="text-base font-medium text-muted-foreground">{label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full w-1/3 rounded-full bg-primary" style={{ animation: "tideslide 1.8s ease-in-out infinite" }} />
-        </div>
-        <p className="mt-4 text-center text-base text-muted-foreground">
+      <div className="mx-auto max-w-2xl px-5 py-10">
+        <ol className="space-y-2">
+          {LOADING_STEPS.map(({ Icon, label }, i) => {
+            const done = i < step;
+            const active = i === step;
+            return (
+              <li
+                key={label}
+                className={`flex items-center gap-4 rounded-xl border p-4 transition-colors ${
+                  active
+                    ? "border-primary/40 bg-muted"
+                    : done
+                      ? "border-border bg-background"
+                      : "border-border bg-background opacity-55"
+                }`}
+              >
+                <span
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: done
+                      ? "var(--risk-safe)"
+                      : active
+                        ? "var(--primary)"
+                        : "var(--muted)",
+                    color: done || active ? "#fff" : "var(--muted-foreground)",
+                  }}
+                >
+                  {done ? (
+                    <Check size={22} />
+                  ) : active ? (
+                    <Loader2 size={22} className="animate-spin" />
+                  ) : (
+                    <Icon size={20} />
+                  )}
+                </span>
+                <span className="flex-1 text-base font-medium">{label}</span>
+                <span className="text-sm font-semibold text-muted-foreground">
+                  {done ? "Done" : active ? "Working…" : "Waiting"}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="mt-5 text-center text-base text-muted-foreground">
           Pulling a real Sentinel-2 image and analyzing the water. This usually takes a minute.
         </p>
       </div>
-      <style>{`
-        @keyframes tidepulse { 0%,100%{opacity:.5} 50%{opacity:1} }
-        @keyframes tideslide { 0%{transform:translateX(-120%)} 100%{transform:translateX(420%)} }
-      `}</style>
     </section>
   );
 }
@@ -217,16 +250,14 @@ const INDEX_FULL: Record<string, string> = {
 
 function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: number }) {
   const actions = toActions(result.recommendation);
-  const alertText = `TideEye water check (${lat.toFixed(3)}, ${lng.toFixed(3)}): ${result.level.toUpperCase()} risk, ${result.score}/100. ${result.explanation} ${result.recommendation}`;
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [sciOpen, setSciOpen] = useState(false);
   const [phones, setPhones] = useState("");
-  const [message, setMessage] = useState(alertText);
   const [sending, setSending] = useState(false);
   const [alertStatus, setAlertStatus] = useState<string | null>(null);
 
-  const sendAlert = async () => {
+  const configureAlert = async () => {
     const list = phones.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     if (list.length === 0) {
       setAlertStatus("Enter at least one phone number.");
@@ -235,15 +266,19 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
     setSending(true);
     setAlertStatus(null);
     try {
-      const r = await fetch("/api/alert", {
+      const r = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phones: list, text: message }),
+        body: JSON.stringify({ phones: list, lat, lng }),
       });
       const d = await r.json();
-      setAlertStatus(r.ok ? `Sent to ${d.sent}/${d.total}.` : d.error ?? "Could not send.");
+      setAlertStatus(
+        r.ok
+          ? `Done. ${d.count} number(s) configured for ${d.place}. They will get a welcome now and daily alerts when the image changes.`
+          : d.error ?? "Could not configure.",
+      );
     } catch {
-      setAlertStatus("Could not send.");
+      setAlertStatus("Could not configure.");
     }
     setSending(false);
   };
@@ -320,10 +355,13 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setAlertOpen((v) => !v)}
+                onClick={() => {
+                  setAlertStatus(null);
+                  setAlertOpen(true);
+                }}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover"
               >
-                <MessageCircle size={18} /> Send alert
+                <BellRing size={18} /> Configure alert
               </button>
               <button
                 type="button"
@@ -335,38 +373,45 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
             </div>
 
             {alertOpen ? (
-              <div className="rounded-2xl border border-border bg-background p-5">
-                <p className="text-base font-semibold">Send this alert by SMS / WhatsApp</p>
-                <label className="mt-3 block text-sm font-medium text-muted-foreground">
-                  Phone numbers (one per line, with country code)
-                </label>
-                <textarea
-                  value={phones}
-                  onChange={(e) => setPhones(e.target.value)}
-                  rows={3}
-                  placeholder={"+22990000000\n+22991111111"}
-                  className="mt-1 w-full rounded-lg border border-border bg-card p-3 font-mono text-sm outline-none focus:border-primary"
-                />
-                <label className="mt-3 block text-sm font-medium text-muted-foreground">
-                  Message
-                </label>
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={4}
-                  className="mt-1 w-full rounded-lg border border-border bg-card p-3 text-sm outline-none focus:border-primary"
-                />
-                <div className="mt-3 flex items-center gap-3">
+              <div className="fixed inset-0 z-30 flex items-center justify-center bg-foreground/50 p-4">
+                <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-lift">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold">Configure an alert</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        These numbers will get a welcome message and a daily WhatsApp alert
+                        whenever the satellite sees a change here.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAlertOpen(false)}
+                      className="rounded-lg p-1 text-muted-foreground hover:bg-muted"
+                      aria-label="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <label className="mt-4 block text-sm font-medium text-muted-foreground">
+                    Phone numbers (one per line, with country code)
+                  </label>
+                  <textarea
+                    value={phones}
+                    onChange={(e) => setPhones(e.target.value)}
+                    rows={4}
+                    placeholder={"+22990000000\n+22991111111"}
+                    className="mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-sm outline-none focus:border-primary"
+                  />
                   <button
                     type="button"
-                    onClick={sendAlert}
+                    onClick={configureAlert}
                     disabled={sending}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-base font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
                   >
-                    <MessageCircle size={16} /> {sending ? "Sending…" : "Send now"}
+                    <BellRing size={18} /> {sending ? "Configuring…" : "Configure alert"}
                   </button>
                   {alertStatus ? (
-                    <span className="text-sm font-medium text-muted-foreground">{alertStatus}</span>
+                    <p className="mt-3 text-sm font-medium text-muted-foreground">{alertStatus}</p>
                   ) : null}
                 </div>
               </div>
@@ -437,6 +482,19 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
           {sciOpen ? (
             <div className="space-y-6 border-t border-border px-6 py-5">
               <div>
+                <p className="text-base font-semibold">Satellite view of this area</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lng - 0.012},${lat - 0.012},${lng + 0.012},${lat + 0.012}&bboxSR=4326&imageSR=4326&size=760,440&format=jpg&f=image`}
+                  alt="Satellite view of the analyzed area"
+                  className="mt-3 w-full rounded-lg border border-border"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Esri World Imagery of the ~1&nbsp;km area analysed. The spectral indices below
+                  are computed on the water inside this box from a Sentinel-2 scene.
+                </p>
+              </div>
+              <div>
                 <p className="text-base font-semibold">Spectral indices (Sentinel-2 L2A)</p>
                 <div className="mt-3 overflow-hidden rounded-lg border border-border">
                   <table className="w-full text-sm">
@@ -449,10 +507,15 @@ function Report({ result, lat, lng }: { result: Analysis; lat: number; lng: numb
                     </thead>
                     <tbody>
                       {result.indices.map((idx) => (
-                        <tr key={idx.code} className="border-t border-border">
+                        <tr key={idx.code} className="border-t border-border align-top">
                           <td className="tabular px-3 py-2 font-semibold text-primary">{idx.code}</td>
                           <td className="px-3 py-2 text-muted-foreground">
-                            {INDEX_FULL[idx.code] ?? idx.label}
+                            <span className="block text-foreground">{INDEX_FULL[idx.code] ?? idx.label}</span>
+                            {idx.interpretation ? (
+                              <span className="mt-0.5 block text-xs leading-relaxed">
+                                {idx.interpretation}
+                              </span>
+                            ) : null}
                           </td>
                           <td className="tabular px-3 py-2 text-right font-semibold">
                             {idx.value.toFixed(4)}

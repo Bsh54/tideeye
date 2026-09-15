@@ -20,7 +20,7 @@ export type Analysis = {
   aoiType: string | null; // "water" | "mixed" | "land"
   recommendation: string;
   explanation: string;
-  indices: { code: string; label: string; value: number }[];
+  indices: { code: string; label: string; value: number; interpretation: string | null }[];
   scene: Scene;
 };
 
@@ -114,7 +114,7 @@ type SessionRead = {
     headline?: string | null;
     bottom_line?: string | null;
   } | null;
-  indices?: { name: string; value: number }[] | null;
+  indices?: { name: string; value: number; interpretation?: string | null }[] | null;
 };
 
 function sceneOf(data: SessionRead): Scene {
@@ -147,6 +147,7 @@ function mapResult(data: SessionRead): Analysis {
     code: i.name,
     label: INDEX_LABELS[i.name] ?? i.name,
     value: i.value,
+    interpretation: i.interpretation ?? null,
   }));
   // The AI (reasoning) is now written in plain language by the prompt, so use
   // it directly; fall back to the deterministic citizen summary.
