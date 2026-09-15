@@ -51,7 +51,13 @@ export async function analyzePoint(
 ): Promise<Analysis> {
   if (!API_BASE) throw new Error("Analysis backend is not configured yet.");
 
-  // 1. Create a session on the AOI polygon.
+  // 1. Create a session on the AOI polygon. Use a wide window and cloud
+  //    tolerance so a usable Sentinel-2 scene is almost always found.
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 120);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
   const createRes = await fetch(`${API_BASE}/api/v1/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,7 +66,9 @@ export async function analyzePoint(
         name: `Point ${lat.toFixed(3)}, ${lng.toFixed(3)}`,
         geometry: polygon,
       },
-      max_cloud_cover: 40,
+      start_date: iso(start),
+      end_date: iso(end),
+      max_cloud_cover: 70,
     }),
   });
   if (!createRes.ok) throw new Error(`Backend returned ${createRes.status}`);

@@ -126,6 +126,7 @@ export function WaterMap({
   const polygonRef = useRef<GeoJSONPolygon | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const firstBasemapRun = useRef(true);
   const [basemap, setBasemap] = useState<Basemap>("satellite");
 
   const selectPoint = (map: maplibregl.Map, lng: number, lat: number) => {
@@ -169,6 +170,12 @@ export function WaterMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // Skip the initial run: the map is already created with the satellite
+    // style, so re-setting it mid-load would break later switches.
+    if (firstBasemapRun.current) {
+      firstBasemapRun.current = false;
+      return;
+    }
     map.setStyle(STYLES[basemap], { diff: false });
     map.once("styledata", () => {
       if (polygonRef.current) drawAoi(map, polygonRef.current);
